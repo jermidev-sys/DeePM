@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DeePM - Private Collection</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg-deep:#080808;
+  --glass-bg:rgba(255,255,255,0.08); 
+  --glass-border:rgba(255,255,255,0.15);
+  --glass-shine:rgba(255,255,255,0.22);
+  --silver:#c8c8c8;
+  --silver-dim:#888;
+  --silver-bright:#e8e8e8;
+  --text-primary:#f0f0f0;
+  --text-secondary:#888;
+  --gradient-bg:linear-gradient(160deg,#1a1a1a 0%,#0d0d0d 40%,#050505 70%,#111 100%);
+}
+html,body{height:100%;overflow:hidden;background:var(--bg-deep)}
+body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;flex-direction:column;align-items:center;justify-content:center}
+#app{width:100%;max-width:430px;height:100dvh;background:var(--gradient-bg);position:relative;overflow:hidden;display:flex;flex-direction:column}
+
+/* Свечение */
+.orb{position:absolute;border-radius:50%;filter:blur(100px);pointer-events:none;z-index:0}
+.orb1{width:280px;height:280px;background:radial-gradient(circle,rgba(255,255,255,0.12),transparent);top:-60px;right:-60px}
+.orb2{width:220px;height:220px;background:radial-gradient(circle,rgba(150,150,150,0.1),transparent);bottom:100px;left:-40px}
+
+/* Жидкое стекло (усиленное) */
+.glass{
+  background: var(--glass-bg);
+  backdrop-filter: blur(40px) saturate(200%); 
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-shine);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+}
+
+#header{padding:52px 20px 16px;display:flex;align-items:center;justify-content:center;z-index:10;position:relative}
+.logo{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;letter-spacing:-0.5px;background:linear-gradient(135deg,#fff 0%,#888 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+#tabs{display:flex;gap:4px;margin:0 20px 16px;padding:4px;border-radius:14px;z-index:10;position:relative;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08)}
+.tab{flex:1;padding:10px 0;border:none;background:transparent;color:var(--text-secondary);font-size:13px;font-weight:600;cursor:pointer;border-radius:10px;transition:all .3s ease}
+.tab.active{background:rgba(255,255,255,0.12);color:#fff;box-shadow:0 4px 15px rgba(0,0,0,0.3)}
+
+#views{flex:1;overflow:hidden;position:relative;z-index:5}
+.view{position:absolute;inset:0;overflow-y:auto;padding:0 20px 140px;display:none;scrollbar-width:none}
+.view.active{display:block}
+
+#player-view{display:none;flex-direction:column;align-items:center;padding:10px 24px 140px}
+#player-view.active{display:flex}
+
+.np-art-wrap{width:100%;max-width:300px;aspect-ratio:1;border-radius:28px;overflow:hidden;margin:10px auto 24px;position:relative;flex-shrink:0}
+.np-art-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+.np-art-placeholder{width:100%;height:100%;background:linear-gradient(135deg,#222,#111);display:flex;align-items:center;justify-content:center}
+.np-art-placeholder svg{width:64px;height:64px;opacity:0.3;fill:none;stroke:#fff;stroke-width:1.5}
+
+.np-info{width:100%;display:flex;flex-direction:column;align-items:center;margin-bottom:25px;text-align:center}
+.np-title{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;margin-bottom:4px}
+.np-artist{font-size:15px;color:var(--text-secondary)}
+
+.progress-wrap{width:100%;margin-bottom:20px}
+.progress-bar{width:100%;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;cursor:pointer;position:relative}
+.progress-fill{height:100%;background:#fff;border-radius:3px;position:relative;box-shadow: 0 0 10px rgba(255,255,255,0.3)}
+.time-row{display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin-top:8px}
+
+.controls{display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:25px}
+.ctrl-btn{width:48px;height:48px;border:none;background:transparent;color:var(--silver-dim);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.ctrl-btn svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2}
+.play-btn{width:70px;height:70px;border-radius:50%;border:none;cursor:pointer;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;box-shadow: 0 10px 25px rgba(255,255,255,0.15)}
+.play-btn svg{width:28px;height:28px;fill:currentColor}
+
+.track-item{display:flex;align-items:center;gap:12px;padding:12px;border-radius:16px;cursor:pointer;margin-bottom:8px;transition:0.2s}
+.track-item.playing{background:rgba(255,255,255,0.1)}
+.track-thumb{width:52px;height:52px;border-radius:12px;overflow:hidden;background:#1a1a1a;display:flex;align-items:center;justify-content:center}
+.track-thumb img{width:100%;height:100%;object-fit:cover}
+.track-thumb svg{width:24px;height:24px;stroke:#444;fill:none;stroke-width:1.5}
+
+#mini-player{position:absolute;bottom:0;left:0;right:0;z-index:100;padding:10px 16px 30px}
+.mini-inner{border-radius:24px;padding:12px 16px;display:flex;align-items:center;gap:12px;}
+.mini-art{width:44px;height:44px;border-radius:10px;overflow:hidden;background:#111}
+.mini-info{flex:1;min-width:0}
+.mini-title{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-play{width:40px;height:40px;border-radius:50%;border:none;background:#fff;color:#000;display:flex;align-items:center;justify-content:center}
+
+.search-input{width:100%;padding:14px 16px 14px 44px;border-radius:16px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;margin:16px 0;outline:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+
+  <div id="header">
+    <span class="logo">DeePM</span>
+  </div>
+
+  <div id="tabs">
+    <button class="tab active" onclick="switchTab('library',this)">Библиотека</button>
+    <button class="tab" onclick="switchTab('player',this)">Плеер</button>
+  </div>
+
+  <div id="views">
+    <div class="view active" id="library-view">
+      <div style="position:relative">
+        <svg style="position:absolute;left:15px;top:33px;width:16px;height:16px;stroke:var(--text-secondary);fill:none;stroke-width:2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="search-input" placeholder="Поиск по коллекции..." oninput="filterTracks(this.value)">
+      </div>
+      <p style="font-size:18px; font-weight:700; margin-bottom:15px; font-family:'Syne'">Моя Коллекция</p>
+      <div id="track-list"></div>
+    </div>
+
+    <div class="view" id="player-view">
+      <div class="np-art-wrap glass">
+        <div class="np-art-placeholder" id="np-placeholder"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+        <img id="np-img" style="display:none">
+      </div>
+      <div class="np-info">
+        <div class="np-title" id="np-title">Не выбрано</div>
+        <div class="np-artist" id="np-artist">Выберите трек</div>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-bar" onclick="seekTo(event)">
+          <div class="progress-fill" id="prog-fill" style="width:0%"></div>
+        </div>
+        <div class="time-row"><span id="time-cur">0:00</span><span id="time-tot">0:00</span></div>
+      </div>
+      <div class="controls">
+        <button class="ctrl-btn" onclick="toggleShuffle()" id="shuffle-btn"><svg viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/></svg></button>
+        <button class="ctrl-btn" onclick="prevTrack()"><svg viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg></button>
+        <button class="play-btn" onclick="togglePlay()"><svg id="play-icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+        <button class="ctrl-btn" onclick="nextTrack()"><svg viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg></button>
+        <button class="ctrl-btn" onclick="toggleRepeat()" id="repeat-btn"><svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="mini-player" onclick="switchTab('player',document.querySelectorAll('.tab')[1])">
+    <div class="mini-inner glass">
+      <div class="mini-art" id="mini-art"></div>
+      <div class="mini-info">
+        <div class="mini-title" id="mini-title">Не выбрано</div>
+        <div class="mini-artist" id="mini-artist">DeePM</div>
+      </div>
+      <button class="mini-play" onclick="event.stopPropagation();togglePlay()">
+        <svg id="mini-play-icon" viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const audio = new Audio();
+let currentIdx = -1;
+let isPlaying = false;
+let shuffle = false;
+let repeatMode = 0;
+
+const MY_TRACKS = [
+  { title: "Любовь в ресторане", artist: "Riso", src: "music/LOVE.mp3" },
+  { title: "Roaming", artist: "Big Baby Tape & LOVV66", src: "music/Roaming.mp3" },
+  { title: "Бойсбэнд", artist: "PhARAOH", src: "music/Boybend.mp3" }
+
+
+];
+
+function fmt(s){
+  if(!s||isNaN(s)) return '0:00';
+  const m=Math.floor(s/60),sec=Math.floor(s%60);
+  return m+':'+(sec<10?'0':'')+sec;
+}
+
+function renderLibrary(filter = ""){
+  const list = document.getElementById('track-list');
+  const filtered = MY_TRACKS.filter(t => 
+    t.title.toLowerCase().includes(filter.toLowerCase()) || 
+    t.artist.toLowerCase().includes(filter.toLowerCase())
+  );
+  list.innerHTML = filtered.map((t, i) => {
+    const realIdx = MY_TRACKS.indexOf(t);
+    return `
+      <div class="track-item ${realIdx === currentIdx ? 'playing' : ''}" onclick="playTrack(${realIdx})">
+        <div class="track-thumb">
+          ${t.cover ? `<img src="${t.cover}">` : '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}
+        </div>
+        <div class="track-info">
+          <div class="track-title">${t.title}</div>
+          <div class="track-artist">${t.artist}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function playTrack(idx){
+  currentIdx = idx;
+  const t = MY_TRACKS[idx];
+  audio.src = t.src;
+  audio.play();
+  isPlaying = true;
+  updateUI();
+  renderLibrary();
+}
+
+function togglePlay(){
+  if(currentIdx < 0 && MY_TRACKS.length > 0) { playTrack(0); return; }
+  if(isPlaying) audio.pause(); else audio.play();
+  isPlaying = !isPlaying;
+  updateUI();
+}
+
+function updateUI(){
+  const t = MY_TRACKS[currentIdx] || {};
+  document.getElementById('np-title').textContent = t.title || "Не выбрано";
+  document.getElementById('np-artist').textContent = t.artist || "Выберите трек";
+  document.getElementById('mini-title').textContent = t.title || "Не выбрано";
+  const icon = isPlaying ? '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>' : '<polygon points="5 3 19 12 5 21 5 3"/>';
+  document.getElementById('play-icon').innerHTML = icon;
+  document.getElementById('mini-play-icon').innerHTML = icon;
+}
+
+function nextTrack(){
+  let next = currentIdx + 1;
+  if(next >= MY_TRACKS.length) next = 0;
+  playTrack(next);
+}
+
+function prevTrack(){
+  let prev = currentIdx - 1;
+  if(prev < 0) prev = MY_TRACKS.length - 1;
+  playTrack(prev);
+}
+
+audio.ontimeupdate = () => {
+  const p = (audio.currentTime / audio.duration) * 100;
+  document.getElementById('prog-fill').style.width = p + '%';
+  document.getElementById('time-cur').textContent = fmt(audio.currentTime);
+  document.getElementById('time-tot').textContent = fmt(audio.duration);
+};
+
+audio.onended = nextTrack;
+
+function switchTab(name, btn){
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(name + '-view').classList.add('active');
+}
+
+function seekTo(e){
+  const r = e.currentTarget.getBoundingClientRect();
+  audio.currentTime = ((e.clientX - r.left) / r.width) * audio.duration;
+}
+
+renderLibrary();
+</script>
+</body>
+</html>

@@ -78,16 +78,11 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
 <div id="app">
   <div class="orb orb1"></div>
   <div class="orb orb2"></div>
-
-  <div id="header">
-    <span class="logo">DeePM</span>
-  </div>
-
+  <div id="header"><span class="logo">DeePM</span></div>
   <div id="tabs">
     <button class="tab active" onclick="switchTab('library',this)">Библиотека</button>
     <button class="tab" onclick="switchTab('player',this)">Плеер</button>
   </div>
-
   <div id="views">
     <div class="view active" id="library-view">
       <div style="position:relative">
@@ -97,7 +92,6 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
       <p style="font-size:18px; font-weight:700; margin-bottom:15px; font-family:'Syne'">Моя Коллекция</p>
       <div id="track-list"></div>
     </div>
-
     <div class="view" id="player-view">
       <div class="np-art-wrap glass">
         <div class="np-art-placeholder" id="np-placeholder"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
@@ -122,7 +116,6 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
       </div>
     </div>
   </div>
-
   <div id="mini-player" onclick="switchTab('player',document.querySelectorAll('.tab')[1])">
     <div class="mini-inner glass">
       <div class="mini-art" id="mini-art"></div>
@@ -136,14 +129,9 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
     </div>
   </div>
 </div>
-
 <script>
 const audio = new Audio();
-let currentIdx = -1;
-let isPlaying = false;
-let isShuffle = false;
-let isRepeat = false;
-
+let currentIdx = -1, isPlaying = false, isShuffle = false, isRepeat = false;
 const MY_TRACKS = [
   { title: "Любовь в ресторане", artist: "Riso", src: "music/LOVE.mp3" },
   { title: "Roaming", artist: "Big Baby Tape & LOVV66", src: "music/Roaming.mp3" },
@@ -154,62 +142,39 @@ const MY_TRACKS = [
   { title: "На посту", artist: "Платина & LIL VAN", src: "music/На посту.mp3" },
   { title: "Улыбаюсь", artist: "SixthSennse", src: "music/Улыбаюсь.mp3" }
 ];
-
 if ('mediaSession' in navigator) {
-  navigator.mediaSession.setActionHandler('play', () => { audio.play(); isPlaying = true; updateUI(); });
-  navigator.mediaSession.setActionHandler('pause', () => { audio.pause(); isPlaying = false; updateUI(); });
-  navigator.mediaSession.setActionHandler('previoustrack', prevTrack);
-  navigator.mediaSession.setActionHandler('nexttrack', nextTrack);
+  navigator.mediaSession.setActionHandler('play', () => togglePlay());
+  navigator.mediaSession.setActionHandler('pause', () => togglePlay());
+  navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
+  navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
 }
-
 function fmt(s){
   if(!s||isNaN(s)) return '0:00';
   const m=Math.floor(s/60),sec=Math.floor(s%60);
   return m+':'+(sec<10?'0':'')+sec;
 }
-
-function filterTracks(query) {
-  renderLibrary(query);
-}
-
+function filterTracks(query) { renderLibrary(query); }
 function toggleShuffle() {
   isShuffle = !isShuffle;
   document.getElementById('shuffle-btn').style.color = isShuffle ? '#fff' : 'var(--silver-dim)';
 }
-
 function toggleRepeat() {
   isRepeat = !isRepeat;
   const btn = document.getElementById('repeat-btn');
-  if(isRepeat) {
-    btn.style.color = '#fff';
-    audio.loop = true;
-  } else {
-    btn.style.color = 'var(--silver-dim)';
-    audio.loop = false;
-  }
+  btn.style.color = isRepeat ? '#fff' : 'var(--silver-dim)';
+  audio.loop = isRepeat;
 }
-
 function renderLibrary(filter = ""){
   const list = document.getElementById('track-list');
-  const filtered = MY_TRACKS.filter(t => 
-    t.title.toLowerCase().includes(filter.toLowerCase()) || 
-    t.artist.toLowerCase().includes(filter.toLowerCase())
-  );
-  list.innerHTML = filtered.map((t, i) => {
+  const filtered = MY_TRACKS.filter(t => t.title.toLowerCase().includes(filter.toLowerCase()) || t.artist.toLowerCase().includes(filter.toLowerCase()));
+  list.innerHTML = filtered.map((t) => {
     const realIdx = MY_TRACKS.indexOf(t);
-    return `
-      <div class="track-item ${realIdx === currentIdx ? 'playing' : ''}" onclick="playTrack(${realIdx})">
-        <div class="track-thumb">
-          ${t.cover ? `<img src="${t.cover}">` : '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}
-        </div>
-        <div class="track-info">
-          <div class="track-title">${t.title}</div>
-          <div class="track-artist">${t.artist}</div>
-        </div>
+    return `<div class="track-item ${realIdx === currentIdx ? 'playing' : ''}" onclick="playTrack(${realIdx})">
+        <div class="track-thumb">${t.cover ? `<img src="${t.cover}">` : '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
+        <div class="track-info"><div class="track-title">${t.title}</div><div class="track-artist">${t.artist}</div></div>
       </div>`;
   }).join('');
 }
-
 function playTrack(idx){
   currentIdx = idx;
   const t = MY_TRACKS[idx];
@@ -219,82 +184,61 @@ function playTrack(idx){
   updateUI();
   renderLibrary();
 }
-
 function togglePlay(){
   if(currentIdx < 0 && MY_TRACKS.length > 0) { playTrack(0); return; }
   if(isPlaying) audio.pause(); else audio.play();
   isPlaying = !isPlaying;
   updateUI();
 }
-
 function updateUI(){
   const t = MY_TRACKS[currentIdx] || {};
   document.getElementById('np-title').textContent = t.title || "Не выбрано";
   document.getElementById('np-artist').textContent = t.artist || "Выберите трек";
   document.getElementById('mini-title').textContent = t.title || "Не выбрано";
   document.getElementById('mini-artist').textContent = t.artist || "Не выбрано";
-  
   const icon = isPlaying ? '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>' : '<polygon points="5 3 19 12 5 21 5 3"/>';
   document.getElementById('play-icon').innerHTML = icon;
   document.getElementById('mini-play-icon').innerHTML = icon;
-
   if ('mediaSession' in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: t.title || "Не выбрано",
-      artist: t.artist || "Не выбрано",
-      album: "DeePM"
+      title: t.title || "DeePM",
+      artist: t.artist || "Collection",
+      album: "DeePM Private",
+      artwork: [{ src: 'https://via.placeholder.com/512', sizes: '512x512', type: 'image/png' }]
     });
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
   }
 }
-
 function nextTrack(){
   if (isShuffle && MY_TRACKS.length > 1) {
-    let next;
-    do {
-      next = Math.floor(Math.random() * MY_TRACKS.length);
-    } while (next === currentIdx);
-    playTrack(next);
-    return;
+    let next; do { next = Math.floor(Math.random() * MY_TRACKS.length); } while (next === currentIdx);
+    playTrack(next); return;
   }
-  let next = currentIdx + 1;
-  if(next >= MY_TRACKS.length) next = 0;
+  let next = currentIdx + 1; if(next >= MY_TRACKS.length) next = 0;
   playTrack(next);
 }
-
 function prevTrack(){
-  let prev = currentIdx - 1;
-  if(prev < 0) prev = MY_TRACKS.length - 1;
+  let prev = currentIdx - 1; if(prev < 0) prev = MY_TRACKS.length - 1;
   playTrack(prev);
 }
-
 audio.ontimeupdate = () => {
   const p = (audio.currentTime / audio.duration) * 100;
   document.getElementById('prog-fill').style.width = p + '%';
   document.getElementById('time-cur').textContent = fmt(audio.currentTime);
   document.getElementById('time-tot').textContent = fmt(audio.duration);
 };
-
-audio.onended = nextTrack;
-
+audio.onended = () => { if(!isRepeat) nextTrack(); };
 function switchTab(name, btn){
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById(name + '-view').classList.add('active');
-
-  const miniPlayer = document.getElementById('mini-player');
-  if(name === 'player') {
-    miniPlayer.style.display = 'none';
-  } else {
-    miniPlayer.style.display = 'block';
-  }
+  document.getElementById('mini-player').style.display = (name === 'player') ? 'none' : 'block';
 }
-
 function seekTo(e){
   const r = e.currentTarget.getBoundingClientRect();
   audio.currentTime = ((e.clientX - r.left) / r.width) * audio.duration;
 }
-
 renderLibrary();
 </script>
 </body>

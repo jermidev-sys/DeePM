@@ -95,10 +95,9 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
     <div class="view" id="browse-view">
       <div style="position:relative">
         <svg style="position:absolute;left:15px;top:33px;width:16px;height:16px;stroke:var(--text-secondary);fill:none;stroke-width:2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input class="search-input" id="sc-search" placeholder="Поиск на SoundCloud..." oninput="scSearchDebounced(this.value)">
+        <input class="search-input" id="sc-search" placeholder="Поиск треков..." oninput="scSearchDebounced(this.value)">
       </div>
-      <p style="font-size:18px; font-weight:700; margin-bottom:15px; font-family:'Syne'">SoundCloud</p>
-      <div id="sc-status" style="font-size:13px;color:var(--text-secondary);margin-bottom:10px"></div>
+      <div id="sc-status" style="font-size:13px;color:var(--text-secondary);margin:10px 0"></div>
       <div id="sc-list"></div>
     </div>
     <div class="view" id="player-view">
@@ -140,7 +139,6 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
 </div>
 <script>
 const audio = new Audio();
-audio.crossOrigin = 'anonymous';
 let currentIdx = -1, isPlaying = false, isShuffle = false, isRepeat = false;
 let currentList = [];
 
@@ -227,7 +225,7 @@ async function scSearch(query){
   if (!SC_CLIENT_ID) { status.textContent = 'Не задан SC_CLIENT_ID. Откройте index.html и впишите client_id.'; return; }
   status.textContent = 'Поиск...';
   try {
-    const r = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${SC_CLIENT_ID}&limit=20`);
+    const r = await fetch(`/api/sc?path=search/tracks&q=${encodeURIComponent(query)}&client_id=${SC_CLIENT_ID}&limit=20`);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
     scResults = (data.collection || []).filter(t => t.media && t.media.transcodings && t.media.transcodings.length).map(t => ({
@@ -252,7 +250,8 @@ async function scPlay(i){
     status.textContent = 'Загрузка потока...';
     try {
       const tr = t.transcodings.find(x => x.format && x.format.protocol === 'progressive') || t.transcodings[0];
-      const r = await fetch(`${tr.url}?client_id=${SC_CLIENT_ID}`);
+      const trPath = tr.url.replace('https://api-v2.soundcloud.com/', '');
+      const r = await fetch(`/api/sc?path=${encodeURIComponent(trPath)}&client_id=${SC_CLIENT_ID}`);
       const j = await r.json();
       t.src = j.url;
       status.textContent = '';

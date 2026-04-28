@@ -72,6 +72,13 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
 .mini-artist{font-size:12px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mini-play{width:40px;height:40px;border-radius:50%;border:none;background:#fff;color:#000;display:flex;align-items:center;justify-content:center}
 .search-input{width:100%;padding:14px 16px 14px 44px;border-radius:16px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;margin:16px 0;outline:none}
+.row-btn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:0.2s}
+.row-btn:hover{background:rgba(255,255,255,0.15)}
+.row-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2}
+.track-info{flex:1;min-width:0}
+.track-title{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.track-artist{font-size:12px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty-state{text-align:center;padding:40px 20px;color:var(--text-secondary);font-size:14px}
 </style>
 </head>
 <body>
@@ -148,16 +155,20 @@ const SC_CLIENT_ID = "jEFGoP9keUaPecfq0yoP321bUoawy2LC";
 let scResults = [];
 let scSearchTimer = null;
 
-const MY_TRACKS = [
-  { title: "Любовь в ресторане", artist: "Riso", src: "music/LOVE.mp3" },
-  { title: "Roaming", artist: "Big Baby Tape & LOVV66", src: "music/Roaming.mp3" },
-  { title: "Бойсбэнд", artist: "PhARAOH", src: "music/Boybend.mp3" },
-  { title: "Гикаю", artist: "Платина", src: "music/Гикаю.mp3" },
-  { title: "Санта Клаус", artist: "Платина", src: "music/Санта Клаус.mp3" },
-  { title: "Бай Бай", artist: "LOVV66", src: "music/Бай Бай.mp3" },
-  { title: "На посту", artist: "Платина & LIL VAN", src: "music/На посту.mp3" },
-  { title: "Улыбаюсь", artist: "SixthSennse", src: "music/Улыбаюсь.mp3" }
-];
+const LIBRARY_KEY = 'deepm_library_v1';
+let library = loadLibrary();
+function loadLibrary(){
+  try { return JSON.parse(localStorage.getItem(LIBRARY_KEY) || '[]'); } catch(e){ return []; }
+}
+function saveLibrary(){ localStorage.setItem(LIBRARY_KEY, JSON.stringify(library)); }
+
+let libraryFilter = '';
+function filterTracks(query) { renderLibrary(query); }
+function fmt(s){
+  if(!s||isNaN(s)) return '0:00';
+  const m=Math.floor(s/60),sec=Math.floor(s%60);
+  return m+':'+(sec<10?'0':'')+sec;
+}
 
 if ('mediaSession' in navigator) {
   navigator.mediaSession.setActionHandler('play', () => togglePlay());
@@ -165,14 +176,6 @@ if ('mediaSession' in navigator) {
   navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
   navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
 }
-
-function fmt(s){
-  if(!s||isNaN(s)) return '0:00';
-  const m=Math.floor(s/60),sec=Math.floor(s%60);
-  return m+':'+(sec<10?'0':'')+sec;
-}
-
-function filterTracks(query) { renderLibrary(query); }
 
 function toggleShuffle() {
   isShuffle = !isShuffle;
@@ -186,17 +189,54 @@ function toggleRepeat() {
   audio.loop = isRepeat;
 }
 
-function renderLibrary(filter = ""){
+function renderLibrary(filter){
+  if (filter !== undefined) libraryFilter = filter;
   const list = document.getElementById('track-list');
-  const filtered = MY_TRACKS.filter(t => t.title.toLowerCase().includes(filter.toLowerCase()) || t.artist.toLowerCase().includes(filter.toLowerCase()));
-  list.innerHTML = filtered.map((t) => {
-    const realIdx = MY_TRACKS.indexOf(t);
-    const isPlaying = realIdx === currentIdx && currentList === MY_TRACKS;
-    return `<div class="track-item ${isPlaying ? 'playing' : ''}" onclick="playTrack(${realIdx}, MY_TRACKS)">
-        <div class="track-thumb">${t.cover ? `<img src="${t.cover}">` : '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
-        <div class="track-info"><div class="track-title">${t.title}</div><div class="track-artist">${t.artist}</div></div>
+  const f = libraryFilter.toLowerCase();
+  const filtered = library.map((t, i) => ({t, i})).filter(({t}) => !f || (t.title||'').toLowerCase().includes(f) || (t.artist||'').toLowerCase().includes(f));
+  if (!library.length) {
+    list.innerHTML = '<div class="empty-state">Библиотека пуста.<br>Перейдите во вкладку <b>Обзор</b> и добавьте треки.</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(({t, i}) => {
+    const isPlaying = i === currentIdx && currentList === library;
+    const cover = t.cover ? `<img src="${escapeHtml(t.cover)}">` : '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+    return `<div class="track-item ${isPlaying ? 'playing' : ''}" onclick="playLibrary(${i})">
+        <div class="track-thumb">${cover}</div>
+        <div class="track-info"><div class="track-title">${escapeHtml(t.title)}</div><div class="track-artist">${escapeHtml(t.artist||'')}</div></div>
+        <button class="row-btn" onclick="event.stopPropagation();removeFromLibrary(${i})" title="Удалить"><svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
       </div>`;
   }).join('');
+}
+function addToLibrary(scIndex){
+  const sc = scResults[scIndex];
+  if (!sc) return;
+  const exists = library.some(t => t.scId && t.scId === sc.scId);
+  if (exists) return;
+  library.push({
+    scId: sc.scId,
+    title: sc.title,
+    artist: sc.artist,
+    cover: sc.cover,
+    transcodings: sc.transcodings
+  });
+  saveLibrary();
+  renderLibrary();
+  renderScResults();
+}
+function removeFromLibrary(idx){
+  if (currentList === library && currentIdx === idx) {
+    audio.pause();
+    isPlaying = false;
+    currentIdx = -1;
+    updateUI();
+  } else if (currentList === library && currentIdx > idx) {
+    currentIdx--;
+  }
+  library.splice(idx, 1);
+  saveLibrary();
+  renderLibrary();
+  renderScResults();
 }
 
 function renderScResults(){
@@ -204,10 +244,15 @@ function renderScResults(){
   if (!list) return;
   list.innerHTML = scResults.map((t, i) => {
     const isPlaying = i === currentIdx && currentList === scResults;
-    const cover = t.cover ? `<img src="${t.cover}">` : '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+    const inLib = library.some(l => l.scId && l.scId === t.scId);
+    const cover = t.cover ? `<img src="${escapeHtml(t.cover)}">` : '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+    const btn = inLib
+      ? `<button class="row-btn" disabled title="Уже в библиотеке" style="opacity:0.5"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></button>`
+      : `<button class="row-btn" onclick="event.stopPropagation();addToLibrary(${i})" title="Добавить в библиотеку"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>`;
     return `<div class="track-item ${isPlaying ? 'playing' : ''}" onclick="scPlay(${i})">
         <div class="track-thumb">${cover}</div>
         <div class="track-info"><div class="track-title">${escapeHtml(t.title)}</div><div class="track-artist">${escapeHtml(t.artist || '')}</div></div>
+        ${btn}
       </div>`;
   }).join('');
 }
@@ -229,6 +274,7 @@ async function scSearch(query){
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
     scResults = (data.collection || []).filter(t => t.media && t.media.transcodings && t.media.transcodings.length).map(t => ({
+      scId: t.id,
       title: t.title,
       artist: t.user && t.user.username,
       cover: t.artwork_url ? t.artwork_url.replace('-large', '-t500x500') : (t.user && t.user.avatar_url),
@@ -242,25 +288,37 @@ async function scSearch(query){
   }
 }
 
+async function resolveStream(t, statusEl){
+  if (!t.transcodings || !t.transcodings.length) throw new Error('Нет доступных потоков');
+  const tr = t.transcodings.find(x => x.format && x.format.protocol === 'progressive') || t.transcodings[0];
+  const trPath = tr.url.replace('https://api-v2.soundcloud.com/', '');
+  if (statusEl) statusEl.textContent = 'Загрузка потока...';
+  const r = await fetch(`/api/sc?path=${encodeURIComponent(trPath)}&client_id=${SC_CLIENT_ID}`);
+  const j = await r.json();
+  if (statusEl) statusEl.textContent = '';
+  return j.url;
+}
 async function scPlay(i){
   const t = scResults[i];
   if (!t) return;
-  if (!t.src) {
-    const status = document.getElementById('sc-status');
-    status.textContent = 'Загрузка потока...';
-    try {
-      const tr = t.transcodings.find(x => x.format && x.format.protocol === 'progressive') || t.transcodings[0];
-      const trPath = tr.url.replace('https://api-v2.soundcloud.com/', '');
-      const r = await fetch(`/api/sc?path=${encodeURIComponent(trPath)}&client_id=${SC_CLIENT_ID}`);
-      const j = await r.json();
-      t.src = j.url;
-      status.textContent = '';
-    } catch (e) {
-      document.getElementById('sc-status').textContent = 'Не удалось получить поток: ' + e.message;
-      return;
-    }
+  try {
+    if (!t.src) t.src = await resolveStream(t, document.getElementById('sc-status'));
+  } catch (e) {
+    document.getElementById('sc-status').textContent = 'Ошибка: ' + e.message;
+    return;
   }
   playTrack(i, scResults);
+}
+async function playLibrary(i){
+  const t = library[i];
+  if (!t) return;
+  try {
+    if (!t.src) t.src = await resolveStream(t, null);
+  } catch (e) {
+    console.error(e);
+    return;
+  }
+  playTrack(i, library);
 }
 
 function playTrack(idx, list){
@@ -284,7 +342,8 @@ function openPlayer(){
 }
 
 function togglePlay(){
-  if(currentIdx < 0 && MY_TRACKS.length > 0) { playTrack(0, MY_TRACKS); return; }
+  if(currentIdx < 0 && library.length > 0) { playLibrary(0); return; }
+  if(currentIdx < 0) return;
   if(isPlaying) audio.pause(); else audio.play();
   isPlaying = !isPlaying;
   updateUI();
@@ -322,18 +381,28 @@ function updateUI(){
 
 function nextTrack(){
   if (!currentList.length) return;
+  let next;
   if (isShuffle && currentList.length > 1) {
-    let next; do { next = Math.floor(Math.random() * currentList.length); } while (next === currentIdx);
-    playTrack(next); return;
+    do { next = Math.floor(Math.random() * currentList.length); } while (next === currentIdx);
+  } else {
+    next = currentIdx + 1; if(next >= currentList.length) next = 0;
   }
-  let next = currentIdx + 1; if(next >= currentList.length) next = 0;
-  playTrack(next);
+  jumpInCurrentList(next);
 }
 
 function prevTrack(){
   if (!currentList.length) return;
   let prev = currentIdx - 1; if(prev < 0) prev = currentList.length - 1;
-  playTrack(prev);
+  jumpInCurrentList(prev);
+}
+
+async function jumpInCurrentList(idx){
+  const t = currentList[idx];
+  if (!t) return;
+  if (!t.src && t.transcodings) {
+    try { t.src = await resolveStream(t, null); } catch(e){ console.error(e); return; }
+  }
+  playTrack(idx, currentList);
 }
 
 audio.ontimeupdate = () => {

@@ -79,6 +79,15 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
 .track-title{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .track-artist{font-size:12px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .empty-state{text-align:center;padding:40px 20px;color:var(--text-secondary);font-size:14px}
+#login-overlay{position:absolute;inset:0;z-index:1000;display:none;flex-direction:column;align-items:center;justify-content:center;background:var(--gradient-bg);padding:30px;text-align:center}
+#login-overlay.active{display:flex}
+#login-overlay .lo-logo{font-family:'Syne',sans-serif;font-size:42px;font-weight:800;letter-spacing:-1px;background:linear-gradient(135deg,#fff,#888);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:14px}
+#login-overlay p{color:var(--text-secondary);margin-bottom:32px;font-size:14px;max-width:280px;line-height:1.5}
+.google-btn{display:flex;align-items:center;gap:12px;padding:12px 22px;border-radius:14px;background:#fff;color:#000;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:0.2s}
+.google-btn:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(255,255,255,0.15)}
+#user-avatar{position:absolute;right:20px;top:52px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.08);display:none;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;font-weight:600;font-size:14px;border:1px solid rgba(255,255,255,0.15);z-index:20}
+#user-avatar.visible{display:flex}
+#user-avatar img{width:100%;height:100%;object-fit:cover}
 </style>
 </head>
 <body>
@@ -131,6 +140,15 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
       </div>
     </div>
   </div>
+  <div id="user-avatar" onclick="signOutUser()" title="Выйти"></div>
+  <div id="login-overlay">
+    <div class="lo-logo">DeePM</div>
+    <p>Войдите, чтобы синхронизировать библиотеку между устройствами</p>
+    <button class="google-btn" onclick="signIn()">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.9 6.1 29.7 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16.1 19 13 24 13c3 0 5.8 1.1 7.9 3l5.7-5.7C34.9 6.1 29.7 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.5-2.1 14.3-5.6l-6.6-5.6c-2 1.4-4.6 2.2-7.7 2.2-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.6 5.6C42 35.6 44 30.2 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+      Войти через Google
+    </button>
+  </div>
   <div id="mini-player" onclick="openPlayer()">
     <div class="mini-inner glass">
       <div class="mini-art" id="mini-art"></div>
@@ -144,7 +162,21 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
     </div>
   </div>
 </div>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <script>
+// === ВПИШИ СЮДА КОНФИГ ИЗ Firebase Console ===
+const firebaseConfig = {
+  apiKey: "AIzaSyAemxmDNN50a9el_xTgI-qinK6dOKaSstY",
+  authDomain: "deepm-b17f2.firebaseapp.com",
+  projectId: "deepm-b17f2",
+  storageBucket: "deepm-b17f2.firebasestorage.app",
+  messagingSenderId: "441499541295",
+  appId: "1:441499541295:web:7fcf88178fa85cb40d0bda",
+  measurementId: "G-V6WNQT6X8K"
+};
+
 const audio = new Audio();
 let currentIdx = -1, isPlaying = false, isShuffle = false, isRepeat = false;
 let currentList = [];
@@ -155,12 +187,83 @@ const SC_CLIENT_ID = "jEFGoP9keUaPecfq0yoP321bUoawy2LC";
 let scResults = [];
 let scSearchTimer = null;
 
-const LIBRARY_KEY = 'deepm_library_v1';
-let library = loadLibrary();
-function loadLibrary(){
+const LIBRARY_KEY = 'deepm_library_cache';
+let library = loadLibraryCache();
+function loadLibraryCache(){
   try { return JSON.parse(localStorage.getItem(LIBRARY_KEY) || '[]'); } catch(e){ return []; }
 }
-function saveLibrary(){ localStorage.setItem(LIBRARY_KEY, JSON.stringify(library)); }
+function saveLibraryCache(){ localStorage.setItem(LIBRARY_KEY, JSON.stringify(library)); }
+
+let fbAuth = null, fbDb = null, fbUser = null, fbUnsub = null, fbReady = false;
+if (firebaseConfig.apiKey) {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    fbAuth = firebase.auth();
+    fbDb = firebase.firestore();
+    fbReady = true;
+    fbAuth.onAuthStateChanged(handleAuthChange);
+  } catch(e){ console.error('Firebase init error:', e); }
+} else {
+  console.warn('Firebase config not set — running in localStorage-only mode');
+  document.addEventListener('DOMContentLoaded', () => {
+    const ov = document.getElementById('login-overlay');
+    if (ov) ov.style.display = 'none';
+  });
+}
+
+async function signIn(){
+  if (!fbAuth) { alert('Firebase не настроен. Впишите firebaseConfig в index.html.'); return; }
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await fbAuth.signInWithPopup(provider);
+  } catch(e){ alert('Ошибка входа: ' + e.message); }
+}
+async function signOutUser(){
+  if (!fbAuth) return;
+  if (!confirm('Выйти из аккаунта?')) return;
+  await fbAuth.signOut();
+}
+function handleAuthChange(user){
+  fbUser = user;
+  updateAuthUI();
+  if (fbUnsub) { fbUnsub(); fbUnsub = null; }
+  if (user) {
+    fbUnsub = fbDb.collection('users').doc(user.uid).onSnapshot(doc => {
+      const data = doc.data();
+      library = (data && Array.isArray(data.tracks)) ? data.tracks : [];
+      saveLibraryCache();
+      renderLibrary();
+      renderScResults();
+    }, err => console.error('Firestore listen error:', err));
+  } else {
+    library = [];
+    if (currentList !== scResults) { currentIdx = -1; currentList = []; audio.pause(); isPlaying = false; updateUI(); }
+    renderLibrary();
+    renderScResults();
+  }
+}
+function updateAuthUI(){
+  const overlay = document.getElementById('login-overlay');
+  const avatar = document.getElementById('user-avatar');
+  if (!overlay || !avatar) return;
+  if (fbUser) {
+    overlay.classList.remove('active');
+    if (fbUser.photoURL) avatar.innerHTML = `<img src="${fbUser.photoURL}" referrerpolicy="no-referrer">`;
+    else avatar.textContent = (fbUser.displayName || fbUser.email || '?')[0].toUpperCase();
+    avatar.classList.add('visible');
+  } else {
+    overlay.classList.add('active');
+    avatar.classList.remove('visible');
+  }
+}
+async function saveLibrary(){
+  saveLibraryCache();
+  if (fbUser && fbDb) {
+    try {
+      await fbDb.collection('users').doc(fbUser.uid).set({ tracks: library }, { merge: true });
+    } catch(e){ console.error('Save error:', e); }
+  }
+}
 
 let libraryFilter = '';
 function filterTracks(query) { renderLibrary(query); }

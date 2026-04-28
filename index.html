@@ -81,7 +81,7 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
   <div id="header"><span class="logo">DeePM</span></div>
   <div id="tabs">
     <button class="tab active" onclick="switchTab('library',this)">Библиотека</button>
-    <button class="tab" onclick="switchTab('player',this)">Плеер</button>
+    <button class="tab" onclick="switchTab('browse',this)">Обзор</button>
   </div>
   <div id="views">
     <div class="view active" id="library-view">
@@ -91,6 +91,15 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
       </div>
       <p style="font-size:18px; font-weight:700; margin-bottom:15px; font-family:'Syne'">Моя Коллекция</p>
       <div id="track-list"></div>
+    </div>
+    <div class="view" id="browse-view">
+      <div style="position:relative">
+        <svg style="position:absolute;left:15px;top:33px;width:16px;height:16px;stroke:var(--text-secondary);fill:none;stroke-width:2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="search-input" id="sc-search" placeholder="Поиск на SoundCloud..." oninput="scSearchDebounced(this.value)">
+      </div>
+      <p style="font-size:18px; font-weight:700; margin-bottom:15px; font-family:'Syne'">SoundCloud</p>
+      <div id="sc-status" style="font-size:13px;color:var(--text-secondary);margin-bottom:10px"></div>
+      <div id="sc-list"></div>
     </div>
     <div class="view" id="player-view">
       <div class="np-art-wrap glass">
@@ -116,7 +125,7 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
       </div>
     </div>
   </div>
-  <div id="mini-player" onclick="switchTab('player',document.querySelectorAll('.tab')[1])">
+  <div id="mini-player" onclick="openPlayer()">
     <div class="mini-inner glass">
       <div class="mini-art" id="mini-art"></div>
       <div class="mini-info">
@@ -131,7 +140,16 @@ body{font-family:'DM Sans',sans-serif;color:var(--text-primary);display:flex;fle
 </div>
 <script>
 const audio = new Audio();
+audio.crossOrigin = 'anonymous';
 let currentIdx = -1, isPlaying = false, isShuffle = false, isRepeat = false;
+let currentList = [];
+
+// SoundCloud API v2. Получите client_id из DevTools на soundcloud.com
+// (Network -> любой запрос к api-v2.soundcloud.com -> параметр client_id)
+const SC_CLIENT_ID = "jEFGoP9keUaPecfq0yoP321bUoawy2LC";
+let scResults = [];
+let scSearchTimer = null;
+
 const MY_TRACKS = [
   { title: "Любовь в ресторане", artist: "Riso", src: "music/LOVE.mp3" },
   { title: "Roaming", artist: "Big Baby Tape & LOVV66", src: "music/Roaming.mp3" },
@@ -142,60 +160,153 @@ const MY_TRACKS = [
   { title: "На посту", artist: "Платина & LIL VAN", src: "music/На посту.mp3" },
   { title: "Улыбаюсь", artist: "SixthSennse", src: "music/Улыбаюсь.mp3" }
 ];
+
 if ('mediaSession' in navigator) {
   navigator.mediaSession.setActionHandler('play', () => togglePlay());
   navigator.mediaSession.setActionHandler('pause', () => togglePlay());
   navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
   navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
 }
+
 function fmt(s){
   if(!s||isNaN(s)) return '0:00';
   const m=Math.floor(s/60),sec=Math.floor(s%60);
   return m+':'+(sec<10?'0':'')+sec;
 }
+
 function filterTracks(query) { renderLibrary(query); }
+
 function toggleShuffle() {
   isShuffle = !isShuffle;
   document.getElementById('shuffle-btn').style.color = isShuffle ? '#fff' : 'var(--silver-dim)';
 }
+
 function toggleRepeat() {
   isRepeat = !isRepeat;
   const btn = document.getElementById('repeat-btn');
   btn.style.color = isRepeat ? '#fff' : 'var(--silver-dim)';
   audio.loop = isRepeat;
 }
+
 function renderLibrary(filter = ""){
   const list = document.getElementById('track-list');
   const filtered = MY_TRACKS.filter(t => t.title.toLowerCase().includes(filter.toLowerCase()) || t.artist.toLowerCase().includes(filter.toLowerCase()));
   list.innerHTML = filtered.map((t) => {
     const realIdx = MY_TRACKS.indexOf(t);
-    return `<div class="track-item ${realIdx === currentIdx ? 'playing' : ''}" onclick="playTrack(${realIdx})">
+    const isPlaying = realIdx === currentIdx && currentList === MY_TRACKS;
+    return `<div class="track-item ${isPlaying ? 'playing' : ''}" onclick="playTrack(${realIdx}, MY_TRACKS)">
         <div class="track-thumb">${t.cover ? `<img src="${t.cover}">` : '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'}</div>
         <div class="track-info"><div class="track-title">${t.title}</div><div class="track-artist">${t.artist}</div></div>
       </div>`;
   }).join('');
 }
-function playTrack(idx){
+
+function renderScResults(){
+  const list = document.getElementById('sc-list');
+  if (!list) return;
+  list.innerHTML = scResults.map((t, i) => {
+    const isPlaying = i === currentIdx && currentList === scResults;
+    const cover = t.cover ? `<img src="${t.cover}">` : '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+    return `<div class="track-item ${isPlaying ? 'playing' : ''}" onclick="scPlay(${i})">
+        <div class="track-thumb">${cover}</div>
+        <div class="track-info"><div class="track-title">${escapeHtml(t.title)}</div><div class="track-artist">${escapeHtml(t.artist || '')}</div></div>
+      </div>`;
+  }).join('');
+}
+
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function scSearchDebounced(q){
+  clearTimeout(scSearchTimer);
+  scSearchTimer = setTimeout(() => scSearch(q), 400);
+}
+
+async function scSearch(query){
+  const status = document.getElementById('sc-status');
+  if (!query || !query.trim()) { scResults = []; renderScResults(); status.textContent = ''; return; }
+  if (!SC_CLIENT_ID) { status.textContent = 'Не задан SC_CLIENT_ID. Откройте index.html и впишите client_id.'; return; }
+  status.textContent = 'Поиск...';
+  try {
+    const r = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${SC_CLIENT_ID}&limit=20`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    scResults = (data.collection || []).filter(t => t.media && t.media.transcodings && t.media.transcodings.length).map(t => ({
+      title: t.title,
+      artist: t.user && t.user.username,
+      cover: t.artwork_url ? t.artwork_url.replace('-large', '-t500x500') : (t.user && t.user.avatar_url),
+      transcodings: t.media.transcodings,
+      src: null
+    }));
+    status.textContent = scResults.length ? '' : 'Ничего не найдено';
+    renderScResults();
+  } catch (e) {
+    status.textContent = 'Ошибка: ' + e.message + '. Возможно, истёк client_id.';
+  }
+}
+
+async function scPlay(i){
+  const t = scResults[i];
+  if (!t) return;
+  if (!t.src) {
+    const status = document.getElementById('sc-status');
+    status.textContent = 'Загрузка потока...';
+    try {
+      const tr = t.transcodings.find(x => x.format && x.format.protocol === 'progressive') || t.transcodings[0];
+      const r = await fetch(`${tr.url}?client_id=${SC_CLIENT_ID}`);
+      const j = await r.json();
+      t.src = j.url;
+      status.textContent = '';
+    } catch (e) {
+      document.getElementById('sc-status').textContent = 'Не удалось получить поток: ' + e.message;
+      return;
+    }
+  }
+  playTrack(i, scResults);
+}
+
+function playTrack(idx, list){
+  if (list) currentList = list;
+  if (!currentList || !currentList[idx]) return;
   currentIdx = idx;
-  const t = MY_TRACKS[idx];
+  const t = currentList[idx];
   audio.src = t.src;
-  audio.play();
+  audio.play().catch(e => console.warn('play error', e));
   isPlaying = true;
   updateUI();
   renderLibrary();
+  renderScResults();
 }
+
+function openPlayer(){
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('player-view').classList.add('active');
+  document.getElementById('mini-player').style.display = 'none';
+}
+
 function togglePlay(){
-  if(currentIdx < 0 && MY_TRACKS.length > 0) { playTrack(0); return; }
+  if(currentIdx < 0 && MY_TRACKS.length > 0) { playTrack(0, MY_TRACKS); return; }
   if(isPlaying) audio.pause(); else audio.play();
   isPlaying = !isPlaying;
   updateUI();
 }
+
 function updateUI(){
-  const t = MY_TRACKS[currentIdx] || {};
+  const t = (currentList && currentList[currentIdx]) || {};
   document.getElementById('np-title').textContent = t.title || "Не выбрано";
   document.getElementById('np-artist').textContent = t.artist || "Выберите трек";
   document.getElementById('mini-title').textContent = t.title || "Не выбрано";
-  document.getElementById('mini-artist').textContent = t.artist || "Не выбрано";
+  document.getElementById('mini-artist').textContent = t.artist || "DeePM";
+  const npImg = document.getElementById('np-img');
+  const npPh = document.getElementById('np-placeholder');
+  const miniArt = document.getElementById('mini-art');
+  if (t.cover) {
+    npImg.src = t.cover; npImg.style.display = 'block'; npPh.style.display = 'none';
+    miniArt.innerHTML = `<img src="${t.cover}" style="width:100%;height:100%;object-fit:cover">`;
+  } else {
+    npImg.style.display = 'none'; npPh.style.display = 'flex';
+    miniArt.innerHTML = '';
+  }
   const icon = isPlaying ? '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>' : '<polygon points="5 3 19 12 5 21 5 3"/>';
   document.getElementById('play-icon').innerHTML = icon;
   document.getElementById('mini-play-icon').innerHTML = icon;
@@ -209,36 +320,45 @@ function updateUI(){
     navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
   }
 }
+
 function nextTrack(){
-  if (isShuffle && MY_TRACKS.length > 1) {
-    let next; do { next = Math.floor(Math.random() * MY_TRACKS.length); } while (next === currentIdx);
+  if (!currentList.length) return;
+  if (isShuffle && currentList.length > 1) {
+    let next; do { next = Math.floor(Math.random() * currentList.length); } while (next === currentIdx);
     playTrack(next); return;
   }
-  let next = currentIdx + 1; if(next >= MY_TRACKS.length) next = 0;
+  let next = currentIdx + 1; if(next >= currentList.length) next = 0;
   playTrack(next);
 }
+
 function prevTrack(){
-  let prev = currentIdx - 1; if(prev < 0) prev = MY_TRACKS.length - 1;
+  if (!currentList.length) return;
+  let prev = currentIdx - 1; if(prev < 0) prev = currentList.length - 1;
   playTrack(prev);
 }
+
 audio.ontimeupdate = () => {
   const p = (audio.currentTime / audio.duration) * 100;
   document.getElementById('prog-fill').style.width = p + '%';
   document.getElementById('time-cur').textContent = fmt(audio.currentTime);
   document.getElementById('time-tot').textContent = fmt(audio.duration);
 };
+
 audio.onended = () => { if(!isRepeat) nextTrack(); };
+
 function switchTab(name, btn){
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
+  if (btn) btn.classList.add('active');
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById(name + '-view').classList.add('active');
-  document.getElementById('mini-player').style.display = (name === 'player') ? 'none' : 'block';
+  document.getElementById('mini-player').style.display = 'block';
 }
+
 function seekTo(e){
   const r = e.currentTarget.getBoundingClientRect();
   audio.currentTime = ((e.clientX - r.left) / r.width) * audio.duration;
 }
+
 renderLibrary();
 </script>
 </body>
